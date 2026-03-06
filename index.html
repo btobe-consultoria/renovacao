@@ -681,15 +681,6 @@
             Copiar chave Pix
           </button>
 
-          <button class="btn btn-secondary" id="openPixBtn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
-            Abrir Pix no banco
-          </button>
-
           <a class="btn btn-whatsapp"
              href="https://wa.me/5541920059901?text=Ol%C3%A1!%20J%C3%A1%20fiz%20o%20pagamento%20da%20renova%C3%A7%C3%A3o%20e%20quero%20enviar%20o%20comprovante."
              target="_blank" rel="noopener noreferrer">
@@ -731,18 +722,6 @@
       const orig = copyBtn.innerHTML;
       copyBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Copiado!`;
       setTimeout(() => { copyBtn.innerHTML = orig; }, 2500);
-    });
-
-    openBtn.addEventListener("click", () => {
-      window.location.href = `pix://pay?key=${encodeURIComponent(pixInput.value)}`;
-      setTimeout(async () => {
-        try {
-          await navigator.clipboard.writeText(pixInput.value);
-          showStatus("Chave copiada! Abra o Pix no seu banco.");
-        } catch {
-          showStatus("Abra o Pix no banco e cole a chave manualmente.");
-        }
-      }, 900);
     });
   </script>
 </body>
