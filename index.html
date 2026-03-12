@@ -218,47 +218,115 @@
   <script>
     const SUPABASE_URL = "https://akqrsjawjphaipmwqwbl.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrcXJzamF3anBoYWlwbXdxd2JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4MzE1NTYsImV4cCI6MjA4ODQwNzU1Nn0.4N92TtzTWqfjIGWAf1cIoOsMWFqG_f_doEasxlcRnkY";
-    async function sbGet(path){const res=await fetch(`${SUPABASE_URL}/rest/v1/${path}`,{headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`}});return res.json()}
-    function getUsername(){const parts=window.location.pathname.replace(/^\//,'').split('/');return parts[0]||null}
-    async function init(){
-      const username=getUsername();
-      const[clients,configs]=await Promise.all([
-        username?sbGet(`clients?username=eq.${encodeURIComponent(username)}&select=*&limit=1`):Promise.resolve([]),
-        sbGet('admin_config?select=*&limit=1')
+
+    async function sbGet(path) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+      });
+      return res.json();
+    }
+
+    function getUsername() {
+      const parts = window.location.pathname.replace(/^\//, '').split('/');
+      return parts[0] || null;
+    }
+
+    async function init() {
+      const username = getUsername();
+
+      const [clients] = await Promise.all([
+        username ? sbGet(`clients?username=eq.${encodeURIComponent(username)}&select=*&limit=1`) : Promise.resolve([]),
       ]);
-      const client=clients&&clients[0]?clients[0]:null;
-      const cfg=configs&&configs[0]?configs[0]:{};
+
+      const client = clients && clients[0] ? clients[0] : null;
+
       document.getElementById('loadingScreen').classList.add('hide');
-      document.getElementById('mainWrapper').style.display='';
-      if(!client){
-        document.getElementById('heroSection').style.display='none';
-        document.getElementById('mainGrid').style.display='none';
-        document.getElementById('errorCard').style.display='flex';
+      document.getElementById('mainWrapper').style.display = '';
+
+      if (!client) {
+        document.getElementById('heroSection').style.display = 'none';
+        document.getElementById('mainGrid').style.display = 'none';
+        document.getElementById('errorCard').style.display = 'flex';
         return;
       }
-      const nome=client.name,valor=client.value,dia=client.due_day;
-      const pix=client.pix_key||cfg.default_pix||'';
-      const wpp=cfg.admin_phone||'';
-      const h1=document.getElementById('heroTitle');
-      if(h1)h1.innerHTML='Olá, <span class="hl">'+nome.split(' ')[0]+'!</span>';
-      const desc=document.getElementById('heroDesc');
-      if(desc&&dia)desc.textContent='Sua assinatura vence no dia '+dia+'. Copie a chave Pix, pague pelo app do banco e envie o comprovante pelo WhatsApp.';
-      if(valor){const n=parseFloat(valor);if(!isNaN(n)){const p=n.toFixed(2).split('.');document.getElementById('amountInt').textContent=p[0];document.getElementById('amountCents').textContent=','+p[1]+' / renovação';document.getElementById('stepValor').textContent='Abra o app do banco, acesse o Pix, cole a chave e pague R$ '+n.toFixed(2).replace('.',',')+'.';}}
-      const input=document.getElementById('pixKey'),label=document.getElementById('pixLabel');
-      input.value=pix||'—';
-      if(pix){const d=pix.replace(/\D/g,'');if(pix.includes('@'))label.textContent='Chave Pix (E-mail)';else if(d.length===11)label.textContent='Chave Pix (CPF / Telefone)';else if(d.length===14)label.textContent='Chave Pix (CNPJ)';else label.textContent='Chave Pix';}
-      const waBtn=document.getElementById('waBtn');
-      if(wpp){const msg=`Olá! 👋\n\n*Sou ${nome} e acabei de realizar o pagamento da renovação.*\n\nSegue o comprovante!`;waBtn.href=`https://wa.me/${wpp}?text=${encodeURIComponent(msg)}`;}
+
+      const nome = client.name;
+      const valor = client.value;
+      const dueDate = client.due_date;
+
+      // Busca chave Pix — prioridade: pix_key_id > pix_key do cliente > pix_key do revendedor
+      let pix = '';
+      if (client.pix_key_id) {
+        const pixRows = await sbGet(`pix_keys?id=eq.${client.pix_key_id}&select=key&limit=1`);
+        if (pixRows && pixRows[0]) pix = pixRows[0].key;
+      }
+      if (!pix && client.pix_key) pix = client.pix_key;
+      if (!pix && client.user_id) {
+        const profiles = await sbGet(`profiles?id=eq.${client.user_id}&select=pix_key,phone&limit=1`);
+        if (profiles && profiles[0]) {
+          if (profiles[0].pix_key) pix = profiles[0].pix_key;
+          // WhatsApp do revendedor para o botão de comprovante
+          if (profiles[0].phone) {
+            const msg = `Olá! 👋\n\n*Sou ${nome} e acabei de realizar o pagamento da renovação.*\n\nSegue o comprovante!`;
+            document.getElementById('waBtn').href = `https://wa.me/${profiles[0].phone}?text=${encodeURIComponent(msg)}`;
+          }
+        }
+      }
+
+      // Hero
+      const h1 = document.getElementById('heroTitle');
+      if (h1) h1.innerHTML = 'Olá, <span class="hl">' + nome.split(' ')[0] + '!</span>';
+
+      const desc = document.getElementById('heroDesc');
+      if (desc && dueDate) {
+        const [, month, day] = dueDate.split('-');
+        desc.textContent = 'Sua assinatura vence no dia ' + day + '/' + month + '. Copie a chave Pix, pague pelo app do banco e envie o comprovante pelo WhatsApp.';
+      }
+
+      // Valor
+      if (valor) {
+        const n = parseFloat(valor);
+        if (!isNaN(n)) {
+          const p = n.toFixed(2).split('.');
+          document.getElementById('amountInt').textContent = p[0];
+          document.getElementById('amountCents').textContent = ',' + p[1] + ' / renovação';
+          document.getElementById('stepValor').textContent = 'Abra o app do banco, acesse o Pix, cole a chave e pague R$ ' + n.toFixed(2).replace('.', ',') + '.';
+        }
+      }
+
+      // Chave Pix
+      const input = document.getElementById('pixKey');
+      const label = document.getElementById('pixLabel');
+      input.value = pix || '—';
+      if (pix) {
+        const d = pix.replace(/\D/g, '');
+        if (pix.includes('@')) label.textContent = 'Chave Pix (E-mail)';
+        else if (d.length === 11) label.textContent = 'Chave Pix (CPF / Telefone)';
+        else if (d.length === 14) label.textContent = 'Chave Pix (CNPJ)';
+        else label.textContent = 'Chave Pix';
+      }
     }
+
     init();
-    const copyBtn=document.getElementById('copyPixBtn'),pixInput=document.getElementById('pixKey'),statusMsg=document.getElementById('statusMsg');
-    function showStatus(msg){statusMsg.textContent=msg;statusMsg.style.opacity='1';clearTimeout(statusMsg._t);statusMsg._t=setTimeout(()=>{statusMsg.style.opacity='0';},3500)}
-    copyBtn.addEventListener('click',async()=>{
-      try{await navigator.clipboard.writeText(pixInput.value);}catch{pixInput.select();document.execCommand('copy');}
+
+    const copyBtn = document.getElementById('copyPixBtn');
+    const pixInput = document.getElementById('pixKey');
+    const statusMsg = document.getElementById('statusMsg');
+
+    function showStatus(msg) {
+      statusMsg.textContent = msg;
+      statusMsg.style.opacity = '1';
+      clearTimeout(statusMsg._t);
+      statusMsg._t = setTimeout(() => { statusMsg.style.opacity = '0'; }, 3500);
+    }
+
+    copyBtn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(pixInput.value); }
+      catch { pixInput.select(); document.execCommand('copy'); }
       showStatus('✓ Chave Pix copiada!');
-      const orig=copyBtn.innerHTML;
-      copyBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Copiado!';
-      setTimeout(()=>{copyBtn.innerHTML=orig;},2500);
+      const orig = copyBtn.innerHTML;
+      copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Copiado!';
+      setTimeout(() => { copyBtn.innerHTML = orig; }, 2500);
     });
   </script>
 </body>
