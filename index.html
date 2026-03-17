@@ -125,7 +125,7 @@
 
     <header class="topbar">
       <div class="topbar-logo">
-        <img src="logo_cobrix_sem_fundo.svg" alt="Cobrix" />
+        <img id="topbarLogo" src="logo_cobrix_sem_fundo.svg" alt="Logo" />
       </div>
       <div class="status-pill">
         <div class="status-dot"></div>
@@ -226,16 +226,16 @@
       return res.json();
     }
 
-    function getUsername() {
+    function getClientId() {
       const parts = window.location.pathname.replace(/^\//, '').split('/');
       return parts[0] || null;
     }
 
     async function init() {
-      const username = getUsername();
+      const clientId = getClientId();
 
       const [clients] = await Promise.all([
-        username ? sbGet(`clients?username=eq.${encodeURIComponent(username)}&select=*&limit=1`) : Promise.resolve([]),
+        clientId ? sbGet(`clients?id=eq.${encodeURIComponent(clientId)}&select=*&limit=1`) : Promise.resolve([]),
       ]);
 
       const client = clients && clients[0] ? clients[0] : null;
@@ -254,23 +254,34 @@
       const valor = client.value;
       const dueDate = client.due_date;
 
-      // Busca chave Pix — prioridade: pix_key_id > pix_key do cliente > pix_key do revendedor
+      // Busca dados do revendedor: pix_key e logo
       let pix = '';
+      let resellerPhone = '';
+
       if (client.pix_key_id) {
         const pixRows = await sbGet(`pix_keys?id=eq.${client.pix_key_id}&select=key&limit=1`);
         if (pixRows && pixRows[0]) pix = pixRows[0].key;
       }
       if (!pix && client.pix_key) pix = client.pix_key;
-      if (!pix && client.user_id) {
-        const profiles = await sbGet(`profiles?id=eq.${client.user_id}&select=pix_key,phone&limit=1`);
+
+      if (client.user_id) {
+        const profiles = await sbGet(`profiles?id=eq.${client.user_id}&select=pix_key,phone,logo_url&limit=1`);
         if (profiles && profiles[0]) {
-          if (profiles[0].pix_key) pix = profiles[0].pix_key;
-          // WhatsApp do revendedor para o botão de comprovante
-          if (profiles[0].phone) {
-            const msg = `Olá! 👋\n\n*Sou ${nome} e acabei de realizar o pagamento da renovação.*\n\nSegue o comprovante!`;
-            document.getElementById('waBtn').href = `https://wa.me/${profiles[0].phone}?text=${encodeURIComponent(msg)}`;
+          if (!pix && profiles[0].pix_key) pix = profiles[0].pix_key;
+          if (profiles[0].phone) resellerPhone = profiles[0].phone;
+
+          // Logo do revendedor — substitui logo padrão se existir
+          if (profiles[0].logo_url) {
+            const logoEl = document.getElementById('topbarLogo');
+            if (logoEl) logoEl.src = profiles[0].logo_url;
           }
         }
+      }
+
+      // WhatsApp do revendedor
+      if (resellerPhone) {
+        const msg = `Olá! 👋\n\n*Sou ${nome} e acabei de realizar o pagamento da renovação.*\n\nSegue o comprovante!`;
+        document.getElementById('waBtn').href = `https://wa.me/${resellerPhone}?text=${encodeURIComponent(msg)}`;
       }
 
       // Hero
