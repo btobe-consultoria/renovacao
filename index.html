@@ -291,7 +291,20 @@
       const desc = document.getElementById('heroDesc');
       if (desc && dueDate) {
         const [, month, day] = dueDate.split('-');
-        desc.textContent = 'Sua assinatura vence no dia ' + day + '/' + month + '. Copie a chave Pix, pague pelo app do banco e envie o comprovante pelo WhatsApp.';
+
+        // Busca descrição personalizada do grupo
+        let chargeDesc = null;
+        if (client.message_group_id) {
+          const groups = await sbGet(`message_groups?id=eq.${client.message_group_id}&select=charge_description&limit=1`);
+          if (groups && groups[0] && groups[0].charge_description) {
+            chargeDesc = groups[0].charge_description;
+          }
+        }
+
+        const defaultDesc = 'Sua assinatura vence no dia ' + day + '/' + month + '. Copie a chave Pix, pague pelo app do banco e envie o comprovante pelo WhatsApp.';
+        desc.textContent = chargeDesc
+          ? chargeDesc.replace('{data}', day + '/' + month).replace('{nome}', nome.split(' ')[0])
+          : defaultDesc;
       }
 
       // Valor
